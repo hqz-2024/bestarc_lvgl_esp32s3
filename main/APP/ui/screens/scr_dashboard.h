@@ -19,11 +19,13 @@ typedef struct {
     /* 左表盘：电流 */
     lv_obj_t *left_arc;
     lv_obj_t *left_arc_img;
+    lv_obj_t *left_cover_arc;
     lv_obj_t *left_val_label;
     lv_obj_t *left_unit_label;
     /* 右表盘：气压 */
     lv_obj_t *right_arc;
     lv_obj_t *right_arc_img;
+    lv_obj_t *right_cover_arc;
     lv_obj_t *right_val_label;
     lv_obj_t *right_unit_label;
     /* 右侧双垂直条：维弧 / 后气 */

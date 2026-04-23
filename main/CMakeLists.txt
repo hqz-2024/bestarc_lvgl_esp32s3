@@ -6,6 +6,7 @@
 
 file(GLOB_RECURSE SOURCES_C *.c)
 file(GLOB_RECURSE SOURCES_CPP *.cpp)
+# force re-glob when new source files are added
 
 list(REMOVE_ITEM SOURCES_C "${CMAKE_CURRENT_SOURCE_DIR}/APP/lvgl_demo.c")
 
