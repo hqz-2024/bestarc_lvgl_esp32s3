@@ -17,12 +17,14 @@ typedef struct {
     /* 中央外环 */
     lv_obj_t *outer_ring;
     /* 左表盘：电流 */
+    lv_obj_t *left_scale;
     lv_obj_t *left_arc;
     lv_obj_t *left_arc_img;
     lv_obj_t *left_cover_arc;
     lv_obj_t *left_val_label;
     lv_obj_t *left_unit_label;
     /* 右表盘：气压 */
+    lv_obj_t *right_scale;
     lv_obj_t *right_arc;
     lv_obj_t *right_arc_img;
     lv_obj_t *right_cover_arc;
@@ -33,6 +35,8 @@ typedef struct {
     lv_obj_t *pilot_val_label;
     lv_obj_t *postair_bar;
     lv_obj_t *postair_val_label;
+    /* 中心图标 */
+    lv_obj_t *lighting_img;
     /* 底部品牌 */
     lv_obj_t *brand_label;
     /* 尺寸 */

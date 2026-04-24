@@ -5,16 +5,27 @@ extern const lv_image_dsc_t left_arc;
 extern const lv_image_dsc_t right_arc;
 extern const lv_image_dsc_t RING_BG;
 extern const lv_image_dsc_t CHIP_BG;
+extern const lv_image_dsc_t lighting;
 
 /* 计量条/表盘动画时长 (ms) */
 #define ANIM_TIME_MS 400
 
 /* 左右表盘显示方式：1=使用图片素材(从下向上填充) 0=使用LVGL arc组件(单色半弧) */
 #define DASHBOARD_USE_ARC_IMAGE 1
+#define DASHBOARD_USE_ARC_SCALE 0
+
+/**
+ * @brief lighting图标呼吸灯效执行回调。
+ * @usage 由lv_anim_t驱动，将opa写入图片对象。
+ */
+static void lighting_opa_cb(void *var, int32_t v)
+{
+    lv_obj_set_style_opa((lv_obj_t *)var, (lv_opa_t)v, 0);
+}
 
 /**
  * @brief arc动画执行回调。
- * @usage 由lv_anim_t驱动，把当前中间值写入lv_arc。
+ * @usage 由lv_anim_t驱动，把当前中间値写入lv_arc。
  */
 static void arc_anim_exec_cb(void *var, int32_t v)
 {
@@ -106,6 +117,75 @@ static lv_obj_t *create_chip(lv_obj_t *parent,
     lv_obj_center(label);
     return label;
 }
+
+#if DASHBOARD_USE_ARC_SCALE
+/* 刻度尺3段分区数据 */
+#define SCALE_SECT_CNT 3
+static lv_style_t s_sect_label_sty[2][SCALE_SECT_CNT];
+static lv_style_t s_sect_minor_sty[2][SCALE_SECT_CNT];
+static lv_style_t s_sect_main_sty[2][SCALE_SECT_CNT];
+static const int32_t s_sect_range[2][SCALE_SECT_CNT][2] = {
+    {{0,40},{40,80},{80,100}},
+    {{0,20},{20,60},{60,100}},
+};
+static const uint32_t s_sect_color[2][SCALE_SECT_CNT] = {
+    {0x05FF00, 0xFD8C3B, 0xFF2A6D},
+    {0x4D00FF, 0x00F0FF, 0x05FF00},
+};
+
+/**
+ * @brief 创建表盘刻度尺（lv_scale，LVGL v9）。
+ * @usage side=0左/1右；rotation内部固定120/280，range 0-100。
+ */
+static lv_obj_t *create_meter_scale(lv_obj_t *parent,
+    lv_coord_t x, lv_coord_t y, lv_coord_t size, int side)
+{
+    lv_obj_t *scale = lv_scale_create(parent);
+    lv_obj_set_size(scale, size, size);
+    lv_obj_set_pos(scale, x, y);
+    lv_obj_update_layout(scale);
+    lv_scale_set_mode(scale, LV_SCALE_MODE_ROUND_INNER);
+    lv_scale_set_total_tick_count(scale, 41);
+    lv_scale_set_major_tick_every(scale, 20);
+    lv_scale_set_label_show(scale, false);
+    lv_scale_set_range(scale, 0, 100);
+    lv_scale_set_angle_range(scale, 140);
+    lv_scale_set_rotation(scale, (side == 0) ? 120 : 280);
+    lv_scale_set_post_draw(scale, true);
+    for (int i = 0; i < SCALE_SECT_CNT; i++) {
+        lv_scale_section_t *sec = lv_scale_add_section(scale);
+        lv_scale_section_set_range(sec, s_sect_range[side][i][0], s_sect_range[side][i][1]);
+        lv_style_init(&s_sect_label_sty[side][i]);
+        lv_style_set_line_color(&s_sect_label_sty[side][i], lv_color_hex(s_sect_color[side][i]));
+        lv_style_init(&s_sect_minor_sty[side][i]);
+        lv_style_set_line_color(&s_sect_minor_sty[side][i], lv_color_hex(s_sect_color[side][i]));
+        lv_style_init(&s_sect_main_sty[side][i]);
+        lv_style_set_arc_color(&s_sect_main_sty[side][i], lv_color_hex(s_sect_color[side][i]));
+        lv_style_set_arc_width(&s_sect_main_sty[side][i], 2);
+        lv_scale_section_set_style(sec, LV_PART_INDICATOR, &s_sect_label_sty[side][i]);
+        lv_scale_section_set_style(sec, LV_PART_MAIN,      &s_sect_main_sty[side][i]);
+        lv_scale_section_set_style(sec, LV_PART_ITEMS,     &s_sect_minor_sty[side][i]);
+    }
+    lv_obj_set_style_bg_opa(scale,       LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(scale,       220,           LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(scale, 0,             LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(scale, 0,             LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_arc_width(scale,    2,             LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_arc_opa(scale,      LV_OPA_COVER,  LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_arc_color(scale,    lv_color_hex(0x757575), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_arc_rounded(scale,  true,          LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_length(scale,       5,             LV_PART_ITEMS | LV_STATE_DEFAULT);
+    lv_obj_set_style_line_width(scale,   2,             LV_PART_ITEMS | LV_STATE_DEFAULT);
+    lv_obj_set_style_line_color(scale,   lv_color_hex(0x757575), LV_PART_ITEMS | LV_STATE_DEFAULT);
+    lv_obj_set_style_line_opa(scale,     LV_OPA_COVER,  LV_PART_ITEMS | LV_STATE_DEFAULT);
+    lv_obj_set_style_length(scale,       10,            LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_line_width(scale,   2,             LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_line_color(scale,   lv_color_hex(0x757575), LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_line_opa(scale,     LV_OPA_COVER,  LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_clear_flag(scale, LV_OBJ_FLAG_CLICKABLE);
+    return scale;
+}
+#endif /* DASHBOARD_USE_ARC_SCALE */
 
 /**
  * @brief 创建右列的垂直进度条（维弧/后气）。
@@ -270,8 +350,8 @@ lv_obj_t *scr_dashboard_create(scr_dashboard_ctx_t *ctx, lv_coord_t screen_width
         "0", "A",
         &ctx->left_val_label, &ctx->left_unit_label);
     /* 左侧数值位置（设计稿：左数值 x=233 y=162，中心约 290, 240） */
-    lv_obj_align(ctx->left_val_label,  LV_ALIGN_CENTER, sx(300, SW) - SW/2, sy(225, SH) - SH/2);
-    lv_obj_align(ctx->left_unit_label, LV_ALIGN_CENTER, sx(300, SW) - SW/2, sy(350, SH) - SH/2);
+    lv_obj_align(ctx->left_val_label,  LV_ALIGN_CENTER, sx(280, SW) - SW/2, sy(240, SH) - SH/2);
+    lv_obj_align(ctx->left_unit_label, LV_ALIGN_CENTER, sx(280, SW) - SW/2, sy(350, SH) - SH/2);
 
     /* 右表盘（气压）：右半圆弧 */
     ctx->right_arc = create_arc_dial(ctx->root,
@@ -281,8 +361,8 @@ lv_obj_t *scr_dashboard_create(scr_dashboard_ctx_t *ctx, lv_coord_t screen_width
         "0", "MPa",
         &ctx->right_val_label, &ctx->right_unit_label);
     lv_arc_set_mode(ctx->right_arc, LV_ARC_MODE_REVERSE);
-    lv_obj_align(ctx->right_val_label,  LV_ALIGN_CENTER, sx(500, SW) - SW/2, sy(225, SH) - SH/2);
-    lv_obj_align(ctx->right_unit_label, LV_ALIGN_CENTER, sx(500, SW) - SW/2, sy(350, SH) - SH/2);
+    lv_obj_align(ctx->right_val_label,  LV_ALIGN_CENTER, sx(520, SW) - SW/2, sy(240, SH) - SH/2);
+    lv_obj_align(ctx->right_unit_label, LV_ALIGN_CENTER, sx(520, SW) - SW/2, sy(350, SH) - SH/2);
 
 #if DASHBOARD_USE_ARC_IMAGE
     /* 用图片素材替代两个LVGL弧控件：先隐藏原弧 */
@@ -341,6 +421,31 @@ lv_obj_t *scr_dashboard_create(scr_dashboard_ctx_t *ctx, lv_coord_t screen_width
     ctx->left_cover_arc = NULL;
     ctx->right_cover_arc= NULL;
 #endif
+
+#if DASHBOARD_USE_ARC_SCALE
+    ctx->left_scale  = create_meter_scale(ctx->root,
+        sx(190, SW), sy(77, SH), sx(420, SW), 0);
+    ctx->right_scale = create_meter_scale(ctx->root,
+        sx(190, SW), sy(77, SH), sx(420, SW), 1);
+#endif
+
+    /* 中心闪电图标 */
+    ctx->lighting_img = lv_image_create(ctx->root);
+    lv_image_set_src(ctx->lighting_img, &lighting);
+    lv_obj_set_pos(ctx->lighting_img,
+        ring_cx - lighting.header.w / 2,
+        ring_cy - lighting.header.h / 2 - 20);
+    lv_obj_clear_flag(ctx->lighting_img, LV_OBJ_FLAG_CLICKABLE);
+    lv_anim_t la;
+    lv_anim_init(&la);
+    lv_anim_set_var(&la, ctx->lighting_img);
+    lv_anim_set_exec_cb(&la, lighting_opa_cb);
+    lv_anim_set_values(&la, 30, 255);
+    lv_anim_set_time(&la, 1200);
+    lv_anim_set_playback_time(&la, 1200);
+    lv_anim_set_repeat_count(&la, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_path_cb(&la, lv_anim_path_ease_in_out);
+    lv_anim_start(&la);
 
     /* 将数值/单位标签移到最前，避免被图片遮住 */
     lv_obj_move_foreground(ctx->left_val_label);
