@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "lvgl_demo",
-    "project_version":    "b4e34e8-dirty",
+    "project_version":    "7f8768f-dirty",
     "project_path":       "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port",
     "idf_path":           "E:/Espressif/frameworks/esp-idf-v5.5.4",
     "build_dir":          "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/build",
