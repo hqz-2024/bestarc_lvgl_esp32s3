@@ -2,10 +2,7 @@
 .vscode/
 .cache/
 .windsurf/
-.idea/
-.cursor/
 build/
-managed_components/
 dependencies.lock
 sdkconfig.old
 *.bin
