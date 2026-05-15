@@ -1,17 +1,19 @@
 #include "board.h"
 #include "ui_manager.h"
-#include "ble_scan.h"
+#include "uart_comm.h"
+#include "ble_server.h"
 #include "freertos/task.h"
 
 /* Core 分配：0=UI/LVGL，1=通讯（BLE+串口） */
 #define UI_CORE   0
 #define COMM_CORE 1
 
-/* 通讯任务：BLE 扫描及未来串口通讯均在 Core 1 运行 */
+/* 通讯任务：在 Core 1 启动 UART1 轮询 + BLE GATT 外设 */
 static void comm_task(void *arg)
 {
     (void)arg;
-    ble_scan_start();
+    uart_comm_start();
+    ble_server_start();
     vTaskDelete(NULL);
 }
 

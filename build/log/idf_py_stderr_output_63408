@@ -1,0 +1,2 @@
+Command: cmake -G Ninja -DPYTHON_DEPS_CHECKED=1 -DPYTHON=E:\Espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe -DESP_PLATFORM=1 -DCCACHE_ENABLE=1 E:\esp32s3\UEDX80480050ESP32-5inch-Touch-Display-main\lvgl_v9_port
+Could not determine LVGL version, assuming v9.x

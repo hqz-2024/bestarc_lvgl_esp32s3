@@ -39,10 +39,10 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
-  include("E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/build/esp-idf/mbedtls/mbedtls/include/cmake_install.cmake")
-  include("E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/build/esp-idf/mbedtls/mbedtls/3rdparty/cmake_install.cmake")
-  include("E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/build/esp-idf/mbedtls/mbedtls/library/cmake_install.cmake")
-  include("E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/build/esp-idf/mbedtls/mbedtls/pkgconfig/cmake_install.cmake")
+  include("E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/lvgl_v9_port/build/esp-idf/mbedtls/mbedtls/include/cmake_install.cmake")
+  include("E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/lvgl_v9_port/build/esp-idf/mbedtls/mbedtls/3rdparty/cmake_install.cmake")
+  include("E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/lvgl_v9_port/build/esp-idf/mbedtls/mbedtls/library/cmake_install.cmake")
+  include("E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/lvgl_v9_port/build/esp-idf/mbedtls/mbedtls/pkgconfig/cmake_install.cmake")
 
 endif()
 

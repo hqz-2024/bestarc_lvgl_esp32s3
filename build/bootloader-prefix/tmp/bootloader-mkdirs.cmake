@@ -10,18 +10,18 @@ if(NOT EXISTS "E:/Espressif/frameworks/esp-idf-v5.5.4/components/bootloader/subp
   file(MAKE_DIRECTORY "E:/Espressif/frameworks/esp-idf-v5.5.4/components/bootloader/subproject")
 endif()
 file(MAKE_DIRECTORY
-  "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/build/bootloader"
-  "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/build/bootloader-prefix"
-  "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/build/bootloader-prefix/tmp"
-  "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/build/bootloader-prefix/src/bootloader-stamp"
-  "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/build/bootloader-prefix/src"
-  "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/build/bootloader-prefix/src/bootloader-stamp"
+  "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/lvgl_v9_port/build/bootloader"
+  "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/lvgl_v9_port/build/bootloader-prefix"
+  "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/lvgl_v9_port/build/bootloader-prefix/tmp"
+  "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/lvgl_v9_port/build/bootloader-prefix/src/bootloader-stamp"
+  "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/lvgl_v9_port/build/bootloader-prefix/src"
+  "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/lvgl_v9_port/build/bootloader-prefix/src/bootloader-stamp"
 )
 
 set(configSubDirs )
 foreach(subDir IN LISTS configSubDirs)
-    file(MAKE_DIRECTORY "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/build/bootloader-prefix/src/bootloader-stamp/${subDir}")
+    file(MAKE_DIRECTORY "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/lvgl_v9_port/build/bootloader-prefix/src/bootloader-stamp/${subDir}")
 endforeach()
 if(cfgdir)
-  file(MAKE_DIRECTORY "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/build/bootloader-prefix/src/bootloader-stamp${cfgdir}") # cfgdir has leading slash
+  file(MAKE_DIRECTORY "E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/lvgl_v9_port/build/bootloader-prefix/src/bootloader-stamp${cfgdir}") # cfgdir has leading slash
 endif()

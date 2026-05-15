@@ -1,4 +1,4 @@
-# Install script for directory: E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/managed_components/espressif__cmake_utilities
+# Install script for directory: E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/lvgl_v9_port/managed_components/espressif__cmake_utilities
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

@@ -1,9 +1,14 @@
 #include "ui_manager.h"
 #include <string.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "esp_lvgl_port.h"
+
 #include "screens/scr_dashboard.h"
 #include "ui_protocol.h"
 #include "demo_data.h"
+#include "ble_server.h"
 
 /* BLE 超时阈值：超过此时间未收到广播则回到演示模式（毫秒） */
 #define BLE_TIMEOUT_MS 5000U
@@ -21,9 +26,14 @@ typedef struct {
     lv_disp_t  *disp;
     uint32_t    last_ble_ms;
     bool        bt_blink_on;
+    bool        app_connected;
+    SemaphoreHandle_t state_mtx;
 } ui_manager_ctx_t;
 
 static ui_manager_ctx_t s_ui;
+
+#define STATE_LOCK()   xSemaphoreTake(s_ui.state_mtx, portMAX_DELAY)
+#define STATE_UNLOCK() xSemaphoreGive(s_ui.state_mtx)
 
 /**
  * @brief 读取大端16位。
@@ -44,14 +54,15 @@ static void ui_manager_refresh(void)
         return;
     }
 
-    /* 蓝牙图标在DEMO模式下闪烁，WORK模式常亮 */
-    if (s_ui.mode == UI_MODE_DEMO) {
-        s_ui.state.bt_connected = s_ui.bt_blink_on;
-    } else {
-        s_ui.state.bt_connected = true;
-    }
+    btc500_state_t snap;
+    STATE_LOCK();
+    /* 蓝牙图标：APP已连接常亮，否则DEMO闪烁 */
+    s_ui.state.bt_connected = s_ui.app_connected ? true :
+        ((s_ui.mode == UI_MODE_DEMO) ? s_ui.bt_blink_on : false);
+    snap = s_ui.state;
+    STATE_UNLOCK();
 
-    scr_dashboard_update(&s_ui.dashboard, &s_ui.state);
+    scr_dashboard_update(&s_ui.dashboard, &snap);
 }
 
 /**
@@ -76,7 +87,9 @@ static void ui_tick_cb(lv_timer_t *t)
         static uint32_t last_demo_ms = 0;
         if ((now - last_demo_ms) >= DEMO_TICK_MS) {
             last_demo_ms = now;
+            STATE_LOCK();
             demo_data_step(&s_ui.state);
+            STATE_UNLOCK();
         }
     }
 
@@ -105,9 +118,11 @@ void ui_manager_init(void)
     memset(&s_ui, 0, sizeof(s_ui));
     s_ui.disp = lv_disp_get_default();
     s_ui.current = UI_SCR_DASHBOARD;
-    s_ui.mode = UI_MODE_DEMO;
+    s_ui.mode = UI_MODE_WORK;
     s_ui.last_ble_ms = 0;
     s_ui.bt_blink_on = false;
+    s_ui.app_connected = false;
+    s_ui.state_mtx = xSemaphoreCreateMutex();
 
     btc500_state_init(&s_ui.state);
     load_dashboard();
@@ -180,16 +195,15 @@ ui_mode_t ui_manager_get_mode(void)
 
 /**
  * @brief 处理BLE收到的AD3 manufacturer数据（14字节有效载荷）。
- * @usage 布局：[设备类型2][钢板2][2T4T2][电流2][后气2][维弧2][单位2]。
- *        注意协议里没有气压值字段，气压随机保留，其他字段实时更新。
+ * @usage 仅供旧扫描者模式参考；本工程ESP32-S3为外设角色，通常不调用。
  */
 void ui_manager_on_ble_state(const uint8_t *payload, size_t len)
 {
-    /* payload 含义参见 communication protocol.md AD3 第8..21字节：共14字节 */
     if (payload == NULL || len < 14U) {
         return;
     }
 
+    STATE_LOCK();
     s_ui.state.device_type      = be16(&payload[0]);
     s_ui.state.mode             = (btc_mode_t)(be16(&payload[2]) % 3U);
     s_ui.state.tmode            = (btc_tmode_t)(be16(&payload[4]) & 0x01U);
@@ -197,31 +211,68 @@ void ui_manager_on_ble_state(const uint8_t *payload, size_t len)
     s_ui.state.postflow_s       = be16(&payload[8]);
     s_ui.state.arcforce_s       = be16(&payload[10]);
     s_ui.state.pressure_unit    = (btc_pressure_unit_t)(be16(&payload[12]) % 3U);
-
-    /* 气压传感器值由BLE之外的源提供；此处保持/置0 */
-    /* 输入电压协议里单独查询，BLE广播未携带，保持默认 */
-
     s_ui.last_ble_ms = lv_tick_get();
     if (s_ui.mode != UI_MODE_WORK) {
         s_ui.mode = UI_MODE_WORK;
     }
-    ui_manager_refresh();
+    STATE_UNLOCK();
+
+    if (lvgl_port_lock(0)) {
+        ui_manager_refresh();
+        lvgl_port_unlock();
+    }
 }
 
 /**
- * @brief 输入协议原始包并驱动界面刷新。
- * @usage 串口12字节协议帧可直接灌入此函数（目前未启用）。
+ * @brief 输入12字节协议原始包并驱动界面刷新。
+ * @usage 由UART任务或其它任务调用，线程安全；解析成功后自动通知BLE广播刷新。
  */
 bool ui_manager_on_protocol_packet(const uint8_t *packet, size_t len)
 {
+    STATE_LOCK();
     bool ok = btc500_parse_packet(packet, len, &s_ui.state);
+    if (ok) {
+        s_ui.last_ble_ms = lv_tick_get();
+        if (s_ui.mode != UI_MODE_WORK) {
+            s_ui.mode = UI_MODE_WORK;
+        }
+    }
+    STATE_UNLOCK();
+
     if (!ok) {
         return false;
     }
-    s_ui.last_ble_ms = lv_tick_get();
-    if (s_ui.mode != UI_MODE_WORK) {
-        s_ui.mode = UI_MODE_WORK;
+
+    if (lvgl_port_lock(0)) {
+        ui_manager_refresh();
+        lvgl_port_unlock();
     }
-    ui_manager_refresh();
+    ble_server_notify_state_changed();
+    ble_server_notify_packet(packet, len);
     return true;
+}
+
+/**
+ * @brief 线程安全获取state副本。
+ * @usage BLE任务构建广播数据时调用。
+ */
+void ui_manager_get_state(btc500_state_t *out)
+{
+    if (out == NULL) {
+        return;
+    }
+    STATE_LOCK();
+    *out = s_ui.state;
+    STATE_UNLOCK();
+}
+
+/**
+ * @brief 设置APP（BLE）连接状态。
+ * @usage BLE连接/断开事件中调用。
+ */
+void ui_manager_set_app_connected(bool connected)
+{
+    STATE_LOCK();
+    s_ui.app_connected = connected;
+    STATE_UNLOCK();
 }

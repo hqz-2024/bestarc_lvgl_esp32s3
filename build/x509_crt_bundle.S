@@ -1,4 +1,4 @@
-/* * Data converted from E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/examples/esp_idf/lvgl_v9_port/build/esp-idf/mbedtls/x509_crt_bundle
+/* * Data converted from E:/esp32s3/UEDX80480050ESP32-5inch-Touch-Display-main/lvgl_v9_port/build/esp-idf/mbedtls/x509_crt_bundle
  */
 .data
 #if !defined (__APPLE__) && !defined (__linux__)
