@@ -1,4 +1,7 @@
 #include "uart_comm.h"
+#include "device_config.h"
+
+#if (DEVICE_ROLE == DEVICE_ROLE_MASTER)
 
 #include <string.h>
 #include "driver/uart.h"
@@ -185,3 +188,12 @@ void uart_comm_set_app_connected(bool connected)
 {
     s_app_connected = connected;
 }
+
+#else /* DEVICE_ROLE != MASTER */
+
+esp_err_t uart_comm_start(void) { return ESP_OK; }
+esp_err_t uart_comm_send_app_cmd(const uint8_t *pkt, size_t len)
+{ (void)pkt; (void)len; return ESP_ERR_NOT_SUPPORTED; }
+void uart_comm_set_app_connected(bool connected) { (void)connected; }
+
+#endif

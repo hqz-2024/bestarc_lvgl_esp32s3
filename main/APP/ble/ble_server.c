@@ -1,8 +1,9 @@
 #include "ble_server.h"
+#include "device_config.h"
 #include "sdkconfig.h"
 #include "esp_log.h"
 
-#ifdef CONFIG_BT_NIMBLE_ENABLED
+#if (DEVICE_ROLE == DEVICE_ROLE_MASTER) && defined(CONFIG_BT_NIMBLE_ENABLED)
 
 #include <string.h>
 #include "nvs_flash.h"
@@ -24,14 +25,51 @@
 #define CHR_UUID16       0xFFE1
 #define ADV_FIELD_LEN    31
 #define FFE1_PKT_LEN     12
+#define MAX_LINK         2
 
 static const char *TAG = "ble_server";
 
-static uint16_t s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
+static uint16_t s_conn_handles[MAX_LINK] = { BLE_HS_CONN_HANDLE_NONE, BLE_HS_CONN_HANDLE_NONE };
+static bool     s_notify_en[MAX_LINK];
+static uint8_t  s_conn_mask;
 static uint16_t s_char_val_handle;
 static uint8_t  s_own_addr_type;
 static uint8_t  s_adv_buf[ADV_FIELD_LEN];
-static bool     s_notify_enabled;
+
+/* 分配连接槽，失败返回 -1。 */
+static int slot_alloc(uint16_t h)
+{
+    for (int i = 0; i < MAX_LINK; i++) {
+        if (s_conn_handles[i] == BLE_HS_CONN_HANDLE_NONE) {
+            s_conn_handles[i] = h;
+            s_conn_mask |= (uint8_t)(1u << i);
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* 释放连接槽。 */
+static void slot_free(uint16_t h)
+{
+    for (int i = 0; i < MAX_LINK; i++) {
+        if (s_conn_handles[i] == h) {
+            s_conn_handles[i] = BLE_HS_CONN_HANDLE_NONE;
+            s_notify_en[i] = false;
+            s_conn_mask &= (uint8_t)~(1u << i);
+            return;
+        }
+    }
+}
+
+/* 通过 handle 查找槽位 idx，未找到返回 -1。 */
+static int slot_find(uint16_t h)
+{
+    for (int i = 0; i < MAX_LINK; i++) {
+        if (s_conn_handles[i] == h) return i;
+    }
+    return -1;
+}
 
 /* AD3 字段偏移（adv_buf 内，MAC 占 10..15） */
 #define O_AD3_DEVTYPE   16
@@ -170,25 +208,33 @@ static int gap_event_cb(struct ble_gap_event *event, void *arg)
     switch (event->type) {
     case BLE_GAP_EVENT_CONNECT:
         if (event->connect.status == 0) {
-            s_conn_handle = event->connect.conn_handle;
-            uart_comm_set_app_connected(true);
-            ui_manager_set_app_connected(true);
-            ESP_LOGI(TAG, "connected handle=%d", s_conn_handle);
+            uint16_t h = event->connect.conn_handle;
+            int idx = slot_alloc(h);
+            ESP_LOGI(TAG, "connected handle=%d slot=%d mask=0x%02X", h, idx, s_conn_mask);
+            uart_comm_set_app_connected(s_conn_mask != 0);
+            ui_manager_set_app_connected(s_conn_mask != 0);
+            /* 未占满时继续广播，接纳第二条连接 */
+            if (s_conn_mask != ((1u << MAX_LINK) - 1u)) {
+                adv_start();
+            }
         } else {
             adv_start();
         }
         break;
     case BLE_GAP_EVENT_DISCONNECT:
-        s_conn_handle = BLE_HS_CONN_HANDLE_NONE;
-        s_notify_enabled = false;
-        uart_comm_set_app_connected(false);
-        ui_manager_set_app_connected(false);
-        ESP_LOGI(TAG, "disconnected reason=%d", event->disconnect.reason);
+        slot_free(event->disconnect.conn.conn_handle);
+        ESP_LOGI(TAG, "disconnected reason=%d mask=0x%02X",
+                 event->disconnect.reason, s_conn_mask);
+        uart_comm_set_app_connected(s_conn_mask != 0);
+        ui_manager_set_app_connected(s_conn_mask != 0);
         adv_start();
         break;
     case BLE_GAP_EVENT_SUBSCRIBE:
         if (event->subscribe.attr_handle == s_char_val_handle) {
-            s_notify_enabled = event->subscribe.cur_notify;
+            int idx = slot_find(event->subscribe.conn_handle);
+            if (idx >= 0) {
+                s_notify_en[idx] = event->subscribe.cur_notify;
+            }
         }
         break;
     default:
@@ -264,18 +310,20 @@ void ble_server_notify_state_changed(void)
 
 void ble_server_notify_packet(const uint8_t *pkt, size_t len)
 {
-    if (s_conn_handle == BLE_HS_CONN_HANDLE_NONE || !s_notify_enabled) {
+    if (pkt == NULL || len != FFE1_PKT_LEN || s_conn_mask == 0) {
         return;
     }
-    if (pkt == NULL || len != FFE1_PKT_LEN) {
-        return;
+    for (int i = 0; i < MAX_LINK; i++) {
+        if (s_conn_handles[i] == BLE_HS_CONN_HANDLE_NONE || !s_notify_en[i]) {
+            continue;
+        }
+        struct os_mbuf *om = ble_hs_mbuf_from_flat(pkt, (uint16_t)len);
+        if (om == NULL) continue;
+        (void)ble_gatts_notify_custom(s_conn_handles[i], s_char_val_handle, om);
     }
-    struct os_mbuf *om = ble_hs_mbuf_from_flat(pkt, (uint16_t)len);
-    if (om == NULL) return;
-    (void)ble_gatts_notify_custom(s_conn_handle, s_char_val_handle, om);
 }
 
-#else /* !CONFIG_BT_NIMBLE_ENABLED */
+#else /* DEVICE_ROLE != MASTER 或未启用 NimBLE */
 
 esp_err_t ble_server_start(void) { return ESP_ERR_NOT_SUPPORTED; }
 void ble_server_notify_state_changed(void) {}
