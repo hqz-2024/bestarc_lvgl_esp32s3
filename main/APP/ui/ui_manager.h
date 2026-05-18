@@ -79,4 +79,10 @@ void ui_manager_get_state(btc500_state_t *out);
  */
 void ui_manager_set_app_connected(bool connected);
 
+/**
+ * @brief 本地触摸操作即时更新state并刷新页面。
+ * @usage 仅在LVGL事件回调内调用，配合ui_cmd_send向下位机/主设备下发。
+ */
+void ui_manager_apply_local_cmd(uint16_t cmd, uint16_t data);
+
 #endif

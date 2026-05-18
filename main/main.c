@@ -9,10 +9,13 @@
 #include "esp_mac.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_log.h"
 
 /* Core 分配：0=UI/LVGL，1=通讯（BLE+串口） */
 #define UI_CORE   0
 #define COMM_CORE 1
+
+
 
 #if (DEVICE_ROLE == DEVICE_ROLE_REMOTE)
 /* 创建配置模式 UI：全屏提示文字 + MAC 副标题。 */
@@ -60,7 +63,9 @@ void app_main(void)
     ESP_ERROR_CHECK(app_touch_init());
     ESP_ERROR_CHECK(app_lvgl_init());   /* LVGL task 已固定 Core 0 */
 
-#if (DEVICE_ROLE == DEVICE_ROLE_REMOTE)
+    esp_log_level_set("LVGL", ESP_LOG_WARN); //触控位置日志
+
+    #if (DEVICE_ROLE == DEVICE_ROLE_REMOTE)
     /* 提前初始化 NVS 以判定是否处于配置模式 */
     (void)remote_nvs_init();
     uint8_t mac_tmp[6];

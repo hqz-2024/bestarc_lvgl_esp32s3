@@ -74,8 +74,16 @@ static void apply_report_cmd(btc500_state_t *state, uint16_t cmd, uint16_t data)
  */
 uint16_t btc500_current_max(const btc500_state_t *state)
 {
-    (void)state;
-    return 30U;
+    if (state == NULL) {
+        return 30U;
+    }
+    bool hi_v = (state->input_voltage_v >= 200U);
+    switch (state->mode) {
+    case BTC_MODE_STEEL: return hi_v ? 50U : 35U;
+    case BTC_MODE_GRID:  return 30U;
+    case BTC_MODE_RUST:  return 30U;
+    default:             return 30U;
+    }
 }
 
 /**

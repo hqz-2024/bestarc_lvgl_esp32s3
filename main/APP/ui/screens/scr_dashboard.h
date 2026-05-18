@@ -1,6 +1,7 @@
 #ifndef UI_SCREENS_SCR_DASHBOARD_H
 #define UI_SCREENS_SCR_DASHBOARD_H
 
+#include <stdbool.h>
 #include "lvgl.h"
 #include "../ui_protocol.h"
 
@@ -42,6 +43,10 @@ typedef struct {
     /* 尺寸 */
     lv_coord_t screen_width;
     lv_coord_t screen_height;
+    /* 触摸拖动标志：拖动期间抑制 scr_dashboard_update 对应控件的覆写 */
+    bool       left_arc_dragging;
+    bool       pilot_dragging;
+    bool       postair_dragging;
 } scr_dashboard_ctx_t;
 
 /**

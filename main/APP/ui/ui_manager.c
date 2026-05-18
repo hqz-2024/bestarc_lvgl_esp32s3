@@ -276,3 +276,41 @@ void ui_manager_set_app_connected(bool connected)
     s_ui.app_connected = connected;
     STATE_UNLOCK();
 }
+
+/* 限幅辅助。 */
+static uint16_t clamp16(uint16_t v, uint16_t lo, uint16_t hi)
+{
+    if (v < lo) return lo;
+    if (v > hi) return hi;
+    return v;
+}
+
+/**
+ * @brief 本地触摸操作即时更新state并刷新页面。
+ * @usage 仅在LVGL事件回调内调用。
+ */
+void ui_manager_apply_local_cmd(uint16_t cmd, uint16_t data)
+{
+    STATE_LOCK();
+    switch (cmd) {
+    case 0x0200: {
+        s_ui.state.mode = (btc_mode_t)clamp16(data, 0, 2);
+        uint16_t cmax = btc500_current_max(&s_ui.state);
+        if (s_ui.state.current_a > cmax) s_ui.state.current_a = cmax;
+        if (s_ui.state.current_a < 15)   s_ui.state.current_a = 15;
+        break;
+    }
+    case 0x0300: s_ui.state.tmode         = (btc_tmode_t)clamp16(data, 0, 1); break;
+    case 0x0400: {
+        uint16_t cmax = btc500_current_max(&s_ui.state);
+        s_ui.state.current_a = clamp16(data, 15, cmax);
+        break;
+    }
+    case 0x0500: s_ui.state.postflow_s    = clamp16(data, 3, 15); break;
+    case 0x0600: s_ui.state.arcforce_s    = clamp16(data, 3, 15); break;
+    case 0x0700: s_ui.state.pressure_unit = (btc_pressure_unit_t)clamp16(data, 0, 2); break;
+    default: STATE_UNLOCK(); return;
+    }
+    STATE_UNLOCK();
+    ui_manager_refresh();
+}
