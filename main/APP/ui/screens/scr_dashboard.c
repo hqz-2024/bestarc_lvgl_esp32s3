@@ -1,5 +1,9 @@
 #include "scr_dashboard.h"
 #include <string.h>
+#include <math.h>
+
+#include "../ui_cmd.h"
+#include "../ui_manager.h"
 
 extern const lv_image_dsc_t left_arc;
 extern const lv_image_dsc_t right_arc;
@@ -197,11 +201,11 @@ static lv_obj_t *create_vbar(lv_obj_t *parent,
                               const char *title,
                               lv_obj_t **val_label_out)
 {
-    lv_obj_t *bar = lv_bar_create(parent);
+    lv_obj_t *bar = lv_slider_create(parent);
     lv_obj_set_size(bar, w, h);
     lv_obj_align(bar, LV_ALIGN_LEFT_MID, x, y);
-    lv_bar_set_range(bar, 3, 15);
-    lv_bar_set_value(bar, 3, LV_ANIM_OFF);
+    lv_slider_set_range(bar, 3, 15);
+    lv_slider_set_value(bar, 3, LV_ANIM_OFF);
     lv_obj_set_style_anim_time(bar, ANIM_TIME_MS, 0);
     lv_obj_set_style_bg_color(bar, COLOR_BAR_BG, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_MAIN);
@@ -210,6 +214,9 @@ static lv_obj_t *create_vbar(lv_obj_t *parent,
     lv_obj_set_style_bg_grad_color(bar, COLOR_BAR_FG, LV_PART_INDICATOR);
     lv_obj_set_style_bg_grad_dir(bar, LV_GRAD_DIR_VER, LV_PART_INDICATOR);
     lv_obj_set_style_radius(bar, w / 2, LV_PART_INDICATOR);
+    /* 隐藏 slider 的 knob */
+    lv_obj_set_style_bg_opa(bar, LV_OPA_TRANSP, LV_PART_KNOB);
+    lv_obj_set_style_pad_all(bar, 0, LV_PART_KNOB);
     /* 让条从顶往下填充 */
     lv_bar_set_mode(bar, LV_BAR_MODE_NORMAL);
 
@@ -286,6 +293,138 @@ static lv_obj_t *create_arc_dial(lv_obj_t *parent,
     }
 
     return arc;
+}
+
+/**
+ * @brief 下发并应用本地命令。
+ * @usage 触摸事件回调中统一调用，先更新state再下发。
+ */
+static void apply_and_send(uint16_t cmd, uint16_t data)
+{
+    ui_manager_apply_local_cmd(cmd, data);
+    ui_cmd_send(cmd, data);
+}
+
+/**
+ * @brief 左电流弧拖动事件。
+ * @usage 按下/拖动期间根据触点角度换算电流并下发。
+ */
+static void on_left_arc_event(lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    scr_dashboard_ctx_t *ctx = (scr_dashboard_ctx_t *)lv_event_get_user_data(e);
+    if (ctx == NULL) return;
+
+    if (code == LV_EVENT_PRESSED) {
+        ctx->left_arc_dragging = true;
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        ctx->left_arc_dragging = false;
+        return;
+    } else if (code != LV_EVENT_PRESSING) {
+        return;
+    }
+
+    lv_indev_t *indev = lv_indev_active();
+    if (indev == NULL) return;
+    lv_point_t p;
+    lv_indev_get_point(indev, &p);
+
+    lv_obj_t *arc = lv_event_get_target(e);
+    lv_area_t area;
+    lv_obj_get_coords(arc, &area);
+    int32_t cx = (area.x1 + area.x2) / 2;
+    int32_t cy = (area.y1 + area.y2) / 2;
+    int32_t dx = p.x - cx;
+    int32_t dy = p.y - cy;
+    if (dx == 0 && dy == 0) return;
+
+    float ang = atan2f((float)dy, (float)dx) * 180.0f / 3.14159265f;
+    if (ang < 0.0f) ang += 360.0f;
+
+    /* 左弧可视范围 120°(底) ~ 240°(顶) */
+    if (ang < 120.0f) ang = 120.0f;
+    if (ang > 240.0f) ang = 240.0f;
+
+    btc500_state_t snap;
+    ui_manager_get_state(&snap);
+    uint16_t cur_max = btc500_current_max(&snap);
+    uint16_t cur_min = 15U;
+    if (cur_max <= cur_min) return;
+    uint16_t span = (uint16_t)(cur_max - cur_min);
+
+    float ratio = (ang - 120.0f) / 120.0f;     /* 顶=1，底=0 */
+    uint16_t new_cur = (uint16_t)(cur_min + (uint16_t)(ratio * (float)span + 0.5f));
+    if (new_cur < cur_min) new_cur = cur_min;
+    if (new_cur > cur_max) new_cur = cur_max;
+    if (new_cur != snap.current_a) {
+        apply_and_send(0x0400, new_cur);
+    }
+}
+
+/**
+ * @brief PILOT/POST 滑条事件回调。
+ * @usage 拖动期间设置标志，VALUE_CHANGED 时下发协议。
+ */
+static void on_slider_event(lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    scr_dashboard_ctx_t *ctx = (scr_dashboard_ctx_t *)lv_event_get_user_data(e);
+    lv_obj_t *slider = lv_event_get_target(e);
+    if (ctx == NULL || slider == NULL) return;
+
+    bool is_pilot = (slider == ctx->pilot_bar);
+    bool *flag = is_pilot ? &ctx->pilot_dragging : &ctx->postair_dragging;
+    uint16_t cmd = is_pilot ? 0x0600 : 0x0500;
+
+    if (code == LV_EVENT_PRESSED) {
+        *flag = true;
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        *flag = false;
+    } else if (code == LV_EVENT_VALUE_CHANGED) {
+        int32_t v = lv_slider_get_value(slider);
+        if (v < 3) v = 3;
+        if (v > 15) v = 15;
+        apply_and_send(cmd, (uint16_t)v);
+    }
+}
+
+/**
+ * @brief 模式 chip 点击循环切换。
+ * @usage 钢/网格/除锈三态循环。
+ */
+static void on_mode_click(lv_event_t *e)
+{
+    (void)e;
+    btc500_state_t snap;
+    ui_manager_get_state(&snap);
+    uint16_t next = (uint16_t)((snap.mode + 1U) % 3U);
+    apply_and_send(0x0200, next);
+}
+
+/**
+ * @brief 2T/4T chip 点击切换。
+ * @usage 0/1 切换。
+ */
+static void on_tmode_click(lv_event_t *e)
+{
+    (void)e;
+    btc500_state_t snap;
+    ui_manager_get_state(&snap);
+    uint16_t next = (uint16_t)((snap.tmode + 1U) % 2U);
+    apply_and_send(0x0300, next);
+}
+
+/**
+ * @brief 气压单位标签点击循环。
+ * @usage PSI→MPA→BAR 循环。
+ */
+static void on_unit_click(lv_event_t *e)
+{
+    (void)e;
+    btc500_state_t snap;
+    ui_manager_get_state(&snap);
+    uint16_t next = (uint16_t)((snap.pressure_unit + 1U) % 3U);
+    apply_and_send(0x0700, next);
 }
 
 /**
@@ -399,7 +538,11 @@ lv_obj_t *scr_dashboard_create(scr_dashboard_ctx_t *ctx, lv_coord_t screen_width
     lv_obj_set_style_arc_color(ctx->left_cover_arc, COLOR_BG, LV_PART_INDICATOR);
     lv_obj_set_style_arc_width(ctx->left_cover_arc, dial_r - 220, LV_PART_INDICATOR);
     lv_obj_set_style_arc_rounded(ctx->left_cover_arc, 0, LV_PART_INDICATOR);
-    lv_obj_clear_flag(ctx->left_cover_arc, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(ctx->left_cover_arc, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(ctx->left_cover_arc, on_left_arc_event, LV_EVENT_PRESSED, ctx);
+    lv_obj_add_event_cb(ctx->left_cover_arc, on_left_arc_event, LV_EVENT_PRESSING, ctx);
+    lv_obj_add_event_cb(ctx->left_cover_arc, on_left_arc_event, LV_EVENT_RELEASED, ctx);
+    lv_obj_add_event_cb(ctx->left_cover_arc, on_left_arc_event, LV_EVENT_PRESS_LOST, ctx);
 
     /* 右黑色裆盖弧： start=300 end=60 NORMAL，初始全覆盖 */
     ctx->right_cover_arc = lv_arc_create(ctx->root);
@@ -461,12 +604,37 @@ lv_obj_t *scr_dashboard_create(scr_dashboard_ctx_t *ctx, lv_coord_t screen_width
     ctx->mode_chip_label    = create_chip(ctx->root, chip_x, sy(204, SH), chip_w, chip_h, "STEEL");
     ctx->tmode_chip_label   = create_chip(ctx->root, chip_x, sy(392, SH), chip_w, chip_h, "2T");
 
+    /* 模式/2T4T chip 启用点击 */
+    lv_obj_t *mode_chip  = lv_obj_get_parent(ctx->mode_chip_label);
+    lv_obj_t *tmode_chip = lv_obj_get_parent(ctx->tmode_chip_label);
+    lv_obj_add_flag(mode_chip,  LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(tmode_chip, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(mode_chip,  on_mode_click,  LV_EVENT_CLICKED, ctx);
+    lv_obj_add_event_cb(tmode_chip, on_tmode_click, LV_EVENT_CLICKED, ctx);
+
+    /* 气压单位标签点击循环 */
+    lv_obj_add_flag(ctx->right_unit_label, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(ctx->right_unit_label, 20);
+    lv_obj_add_event_cb(ctx->right_unit_label, on_unit_click, LV_EVENT_CLICKED, ctx);
+
     /* 右侧双垂直条：x/y 为相对屏幕左中的偏移，bar 以左中为锚点 */
     lv_coord_t bar_w = sx(20, SW);
     lv_coord_t bar_h = sy(280, SH);
     lv_coord_t bar_y = 20;  /* 以屏幕垂直中心为基准 */
     ctx->pilot_bar   = create_vbar(ctx->root, sx(670, SW), bar_y, bar_w, bar_h, "PILOT ARC", &ctx->pilot_val_label);
     ctx->postair_bar = create_vbar(ctx->root, sx(745, SW), bar_y, bar_w, bar_h, "POST AIR", &ctx->postair_val_label);
+
+    /* 扩展滑条触摸热区并绑定事件 */
+    lv_obj_set_ext_click_area(ctx->pilot_bar,   16);
+    lv_obj_set_ext_click_area(ctx->postair_bar, 16);
+    lv_obj_add_event_cb(ctx->pilot_bar,   on_slider_event, LV_EVENT_PRESSED,       ctx);
+    lv_obj_add_event_cb(ctx->pilot_bar,   on_slider_event, LV_EVENT_RELEASED,      ctx);
+    lv_obj_add_event_cb(ctx->pilot_bar,   on_slider_event, LV_EVENT_PRESS_LOST,    ctx);
+    lv_obj_add_event_cb(ctx->pilot_bar,   on_slider_event, LV_EVENT_VALUE_CHANGED, ctx);
+    lv_obj_add_event_cb(ctx->postair_bar, on_slider_event, LV_EVENT_PRESSED,       ctx);
+    lv_obj_add_event_cb(ctx->postair_bar, on_slider_event, LV_EVENT_RELEASED,      ctx);
+    lv_obj_add_event_cb(ctx->postair_bar, on_slider_event, LV_EVENT_PRESS_LOST,    ctx);
+    lv_obj_add_event_cb(ctx->postair_bar, on_slider_event, LV_EVENT_VALUE_CHANGED, ctx);
 
     /* 蓝牙图标（右上角） */
     ctx->bt_icon = lv_label_create(ctx->root);
@@ -512,21 +680,21 @@ void scr_dashboard_update(scr_dashboard_ctx_t *ctx, const btc500_state_t *state)
         return;
     }
 
-    /* 电流表盘：量程15-30A映射到0-100 */
-    uint16_t cur_max = btc500_current_max(state);
-    uint16_t cur_min = 15U;
-    uint16_t cur_val = LV_MIN(state->current_a, cur_max);
-    if (cur_val < cur_min) cur_val = cur_min;
-    uint16_t cur_span = (cur_max > cur_min) ? (uint16_t)(cur_max - cur_min) : 1U;
-    arc_set_value_anim(ctx->left_arc, (int16_t)((uint32_t)(cur_val - cur_min) * 100U / cur_span));
+    /* 电流表盘：量程按模式/电压区分，最小15 */
+    if (!ctx->left_arc_dragging) {
+        uint16_t cur_max = btc500_current_max(state);
+        uint16_t cur_min = 15U;
+        uint16_t cur_val = LV_MIN(state->current_a, cur_max);
+        if (cur_val < cur_min) cur_val = cur_min;
+        uint16_t cur_span = (cur_max > cur_min) ? (uint16_t)(cur_max - cur_min) : 1U;
+        arc_set_value_anim(ctx->left_arc, (int16_t)((uint32_t)(cur_val - cur_min) * 100U / cur_span));
 #if DASHBOARD_USE_ARC_IMAGE
-    arc_set_value_anim(ctx->left_cover_arc,
-        100 - (int16_t)((uint32_t)(cur_val - cur_min) * 100U / cur_span));
-    // arc_set_value_anim(ctx->left_cover_arc,
-    //     0);
+        arc_set_value_anim(ctx->left_cover_arc,
+            100 - (int16_t)((uint32_t)(cur_val - cur_min) * 100U / cur_span));
 #endif
-    lv_snprintf(buf, sizeof(buf), "%u", state->current_a);
-    lv_label_set_text(ctx->left_val_label, buf);
+        lv_snprintf(buf, sizeof(buf), "%u", state->current_a);
+        lv_label_set_text(ctx->left_val_label, buf);
+    }
 
     /* 气压表盘 */
     uint16_t pr_max = btc500_pressure_max(state);
@@ -549,13 +717,17 @@ void scr_dashboard_update(scr_dashboard_ctx_t *ctx, const btc500_state_t *state)
     lv_label_set_text(ctx->tmode_chip_label, btc500_tmode_text(state->tmode));
 
     /* 右侧双条 */
-    lv_bar_set_value(ctx->pilot_bar, state->arcforce_s, LV_ANIM_ON);
-    lv_snprintf(buf, sizeof(buf), "%uS", state->arcforce_s);
-    lv_label_set_text(ctx->pilot_val_label, buf);
+    if (!ctx->pilot_dragging) {
+        lv_slider_set_value(ctx->pilot_bar, state->arcforce_s, LV_ANIM_ON);
+        lv_snprintf(buf, sizeof(buf), "%uS", state->arcforce_s);
+        lv_label_set_text(ctx->pilot_val_label, buf);
+    }
 
-    lv_bar_set_value(ctx->postair_bar, state->postflow_s, LV_ANIM_ON);
-    lv_snprintf(buf, sizeof(buf), "%uS", state->postflow_s);
-    lv_label_set_text(ctx->postair_val_label, buf);
+    if (!ctx->postair_dragging) {
+        lv_slider_set_value(ctx->postair_bar, state->postflow_s, LV_ANIM_ON);
+        lv_snprintf(buf, sizeof(buf), "%uS", state->postflow_s);
+        lv_label_set_text(ctx->postair_val_label, buf);
+    }
 
     /* 蓝牙图标颜色 */
     lv_obj_set_style_text_color(ctx->bt_icon,

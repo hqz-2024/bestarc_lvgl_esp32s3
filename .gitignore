@@ -1,0 +1,10 @@
+.augment/
+.vscode/
+.cache/
+.windsurf/
+build/
+dependencies.lock
+sdkconfig.old
+*.bin
+*.elf
+*.map

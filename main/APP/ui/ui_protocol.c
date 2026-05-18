@@ -6,12 +6,12 @@
 #define BTC_TAIL 0x55BBu
 
 /**
- * @brief 读取大端16位数据。
+ * @brief 读取小端16位数据。
  * @usage 传入2字节起始地址，返回uint16_t值。
  */
-static uint16_t read_u16_be(const uint8_t *data)
+static uint16_t read_u16_le(const uint8_t *data)
 {
-    return ((uint16_t)data[0] << 8) | data[1];
+    return ((uint16_t)data[1] << 8) | data[0];
 }
 
 /**
@@ -74,8 +74,16 @@ static void apply_report_cmd(btc500_state_t *state, uint16_t cmd, uint16_t data)
  */
 uint16_t btc500_current_max(const btc500_state_t *state)
 {
-    (void)state;
-    return 30U;
+    if (state == NULL) {
+        return 30U;
+    }
+    bool hi_v = (state->input_voltage_v >= 200U);
+    switch (state->mode) {
+    case BTC_MODE_STEEL: return hi_v ? 50U : 35U;
+    case BTC_MODE_GRID:  return 30U;
+    case BTC_MODE_RUST:  return 30U;
+    default:             return 30U;
+    }
 }
 
 /**
@@ -129,12 +137,12 @@ bool btc500_parse_packet(const uint8_t *packet, size_t len, btc500_state_t *stat
         return false;
     }
 
-    head = read_u16_be(&packet[0]);
-    device_type = read_u16_be(&packet[2]);
-    cmd = read_u16_be(&packet[4]);
-    data = read_u16_be(&packet[6]);
-    checksum = read_u16_be(&packet[8]);
-    tail = read_u16_be(&packet[10]);
+    head = read_u16_le(&packet[0]);
+    device_type = read_u16_le(&packet[2]);
+    cmd = read_u16_le(&packet[4]);
+    data = read_u16_le(&packet[6]);
+    checksum = read_u16_le(&packet[8]);
+    tail = read_u16_le(&packet[10]);
 
     if (head != BTC_HEAD || tail != BTC_TAIL) {
         return false;

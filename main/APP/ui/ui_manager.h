@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "lvgl.h"
+#include "ui_protocol.h"
 
 typedef enum {
     UI_SCR_DASHBOARD = 0,
@@ -62,7 +63,26 @@ void ui_manager_deinit(void);
 /**
  * @brief 输入协议原始包并驱动界面刷新。
  * @usage 接收到12字节协议数据后调用，返回true表示解析成功并已刷新界面。
+ *        线程安全：内部使用mutex保护state，并自动lvgl_port_lock刷新UI。
  */
 bool ui_manager_on_protocol_packet(const uint8_t *packet, size_t len);
+
+/**
+ * @brief 线程安全获取当前state副本。
+ * @usage BLE任务构建广播包/通知时调用。
+ */
+void ui_manager_get_state(btc500_state_t *out);
+
+/**
+ * @brief 设置APP（BLE）连接状态。
+ * @usage BLE连接/断开事件中调用，用于UI蓝牙图标点亮控制。
+ */
+void ui_manager_set_app_connected(bool connected);
+
+/**
+ * @brief 本地触摸操作即时更新state并刷新页面。
+ * @usage 仅在LVGL事件回调内调用，配合ui_cmd_send向下位机/主设备下发。
+ */
+void ui_manager_apply_local_cmd(uint16_t cmd, uint16_t data);
 
 #endif
